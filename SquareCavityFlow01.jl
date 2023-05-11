@@ -22,12 +22,12 @@ tmax = 10000         # 计算总时间SI[s]
 Re = U * H / nu
 println("环境雷诺数Re = ", Re)
 
-# LGBK
+# LGBKBase
 function LGBK()
     # 求解域
     x = LinRange(0, H, N)
     y = LinRange(0, H, N)
-    #X, Y = meshgrid2(x, y)    # 右为x正向，下为y正向(该功能由TyPlot可提供)
+    #X, Y = meshgrid2(x, y)    # 右为x正向，下为y正向(该功能由TyBase可提供)
     X = x' .* ones(N)         # 定义右为x正向，下为y正向
     Y = ones(N)' .* y
     t = 1:δt:tmax
