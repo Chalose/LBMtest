@@ -144,6 +144,6 @@ begin
         p2 = contour(x, y, dynamic_P[:, :, tk],
             aspect_ratio=1,
             title="dynamic pressure[pa]")
-        p3 = plot(p1, p2, layout=(2, 1), size=(500, 800), xlims=(0,100), ylims=(0,100))
+        p3 = plot(p1, p2, layout=(2, 1), size=(500, 800), xlims=(0,H), ylims=(0,H))
     end
 end
