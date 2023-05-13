@@ -136,7 +136,7 @@ end
 
 begin
     @gif for tk in 1:20:M
-        ttl = string("t = ", round(tk, digits=1), "s ", "speed[m/s]")
+        ttl = string("t = ", round(tk*δt, digits=1), "s ", "speed[m/s]")
         p1 = heatmap(x, y, umod[:, :, tk],
             color=:turbo,
             title=ttl,
