@@ -30,7 +30,7 @@ y = LinRange(0, H, N)
 #X, Y = meshgrid2(x, y)
 X = x' .* ones(N)         # 右为x正向，下为y正向
 Y = ones(N)' .* y
-t = 1:δt:tmax
+t = 0:δt:tmax
 M = length(t)
 # 设置固定壁蒙板
 obst = (X .- obstX) .^ 2 + (Y .- obstY) .^ 2 .<= obstR^2    # 圆壁面
