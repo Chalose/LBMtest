@@ -22,8 +22,8 @@ tmax = 10000         # 计算总时间SI[s]
 Re = U * H / nu
 println("环境雷诺数Re = ", Re)
 
-# LGBKBase
-function L()
+# LBGK
+function LBGK()
     # 求解域
     x = LinRange(0, H, N)
     y = LinRange(0, H, N)
