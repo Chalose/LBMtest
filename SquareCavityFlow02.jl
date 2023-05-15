@@ -38,8 +38,8 @@ obst[:, [1, N]] .= true                                 # 左右壁面
 obst[1, :] .= true                                      # 底壁面
 CI_obst = findall(obst)                                 # 获取固定壁的笛卡尔索引序列
 
-# LGBK:
-function LGBK()
+# LBGK:
+function LBGK()
     # D2Q9:
     δx = H / (N - 1)
     c₀ = δx / δt
@@ -121,7 +121,7 @@ function LGBK()
 
     return save_P, save_ux, save_uy
 end
-save_P, save_ux, save_uy = @time LGBK()
+save_P, save_ux, save_uy = @time LBGK()
 
 # 绘图
 # Plots:
