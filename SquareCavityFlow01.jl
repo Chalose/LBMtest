@@ -23,7 +23,7 @@ Re = U * H / nu
 println("环境雷诺数Re = ", Re)
 
 # LGBKBase
-function LGBK()
+function L()
     # 求解域
     x = LinRange(0, H, N)
     y = LinRange(0, H, N)
@@ -113,7 +113,7 @@ function LGBK()
 
     return X, Y, save_P, save_ux, save_uy
 end
-X, Y, save_P, save_ux, save_uy = @time LGBK()
+X, Y, save_P, save_ux, save_uy = @time LBGK()
 
 # 绘图
 # Typlot:
