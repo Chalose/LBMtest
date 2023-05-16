@@ -3,4 +3,4 @@
 
 圆柱绕流(Re=150)
  ![Image text]
- ([Screenshots/shouye.png](https://github.com/Chalose/LBMtest/blob/main/images/jl_gtnkO7HF07.gif)) 
+ (https://github.com/Chalose/LBMtest/blob/main/images/jl_gtnkO7HF07.gif)
