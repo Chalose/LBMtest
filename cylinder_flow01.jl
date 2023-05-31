@@ -19,7 +19,7 @@ obstR = H / 10
 Re = 150                                   # 雷诺数
 δx = 1                                     # 空间步长SI[m]
 δt = 0.1                                   # 时间步长SI[s]
-tmax = 1500                                # 计算时间SI[s]
+tmax = 150                                 # 计算时间SI[s]
 u̅ᵢₙ = Re*ν/(2*obstR)                       # 入口平均速度SI[m/s]
 
 # 求解域
@@ -58,7 +58,6 @@ function LBGK()
     U = 6 * u̅ᵢₙ / H^2 * Y[2:Ny, 1] .* (H .- Y[2:Ny, 1])           # 入口速度抛物型分布设置
     u[2:Ny, 1, 1] = U
     f = zeros(Ny + 1, Nx + 1, 9)
-    F = zeros(Ny + 1, Nx + 1, 9)
     # 分布函数初值:
     for k in 1:9
         f[:, :, k] = ω[k] * ρ[:, :] .* (1 .+ 1 / cₛ^2 * (
@@ -89,6 +88,21 @@ function LBGK()
     # LBGK:
     num = 1    # 存储计数
     for tk in 1:M
+        # 入口，出口的非平衡外推边界
+        # 入出口宏观边界设置(细节待定)
+        ρ[:, Nx+1] = ρ[:, Nx]
+        u[2:Ny, 1, 1] = U
+        u[2:Ny, 1, 2] .= 0.0
+        u[:, Nx+1, 1] = u[:, Nx, 1]
+        u[:, Nx+1, 2] .= 0.0
+        # 边界分布的非平衡外推(Guo格式)
+        for k in [2, 6, 9]
+            f[2:Ny, 1, k] = fEq2(ρ[2:Ny, 1], u[2:Ny, 1, 1], u[2:Ny, 1, 2], k) + f[2:Ny, 2, k] - fEq2(ρ[2:Ny, 2], u[2:Ny, 2, 1], u[2:Ny, 2, 2], k)
+        end
+        for k in [4, 8, 7]
+            f[2:Ny, Nx+1, k] = fEq2(ρ[2:Ny, Nx+1], u[2:Ny, Nx+1, 1], u[2:Ny, Nx+1, 2], k) + f[2:Ny, Nx, k] - fEq2(ρ[2:Ny, Nx], u[2:Ny, Nx, 1], u[2:Ny, Nx, 2], k)
+        end
+    
         # 碰撞与迁移(内点)
         f[2:Ny, 2:Nx, 1] = f[2:Ny, 2:Nx, 1] + 1 / τ * (fEq1(ρ[2:Ny, 2:Nx], u[2:Ny, 2:Nx, :], 1) - f[2:Ny, 2:Nx, 1])
         f[2:Ny, 2:Nx, 2] = f[2:Ny, 1:Nx-1, 2] + 1 / τ * (fEq1(ρ[2:Ny, 1:Nx-1], u[2:Ny, 1:Nx-1, :], 2) - f[2:Ny, 1:Nx-1, 2])
@@ -99,34 +113,20 @@ function LBGK()
         f[2:Ny, 2:Nx, 7] = f[1:Ny-1, 3:Nx+1, 7] + 1 / τ * (fEq1(ρ[1:Ny-1, 3:Nx+1], u[1:Ny-1, 3:Nx+1, :], 7) - f[1:Ny-1, 3:Nx+1, 7])
         f[2:Ny, 2:Nx, 8] = f[3:Ny+1, 3:Nx+1, 8] + 1 / τ * (fEq1(ρ[3:Ny+1, 3:Nx+1], u[3:Ny+1, 3:Nx+1, :], 8) - f[3:Ny+1, 3:Nx+1, 8])
         f[2:Ny, 2:Nx, 9] = f[3:Ny+1, 1:Nx-1, 9] + 1 / τ * (fEq1(ρ[3:Ny+1, 1:Nx-1], u[3:Ny+1, 1:Nx-1, :], 9) - f[3:Ny+1, 1:Nx-1, 9])
+    
         # 固定壁边界条件
-        F = f
-        for i in CI_obst
-            f[i, 2] = F[i, 4]
-            f[i, 3] = F[i, 5]
-            f[i, 4] = F[i, 2]
-            f[i, 5] = F[i, 3]
-            f[i, 6] = F[i, 8]
-            f[i, 7] = F[i, 9]
-            f[i, 8] = F[i, 6]
-            f[i, 9] = F[i, 7]
+        @views for i in CI_obst
+            f[i, [2, 4]] = f[i, [4, 2]]
+            f[i, [3, 5]] = f[i, [5, 3]]
+            f[i, [6, 8]] = f[i, [8, 6]]
+            f[i, [7, 9]] = f[i, [9, 7]]
         end
+    
         # 宏观量ρ 、u
         ρ = sum(f, dims=3)
         u[:, :, 1] = sum(reshape(cx .* reshape(f, (Ny + 1) * (Nx + 1), 9), Ny + 1, Nx + 1, 9), dims=3) ./ ρ
         u[:, :, 2] = sum(reshape(cy .* reshape(f, (Ny + 1) * (Nx + 1), 9), Ny + 1, Nx + 1, 9), dims=3) ./ ρ
-        # 入口，出口的非平衡外推边界(要基于边界与近邻流体格点的新分布值)
-        # 出口x向压力梯度为0，故出口速度x向梯度为0
-        ρ[:, Nx+1] = ρ[:, Nx]
-        u[2:Ny, 1, 1] = U
-        u[2:Ny, 1, 2] .= 0.0
-        u[:, Nx+1, 1] = u[:, Nx, 1]
-        u[:, Nx+1, 2] .= 0.0
-        # 边界分布的非平衡外推(Guo格式)
-        for k in 1:9
-            f[2:Ny, 1, k] = fEq2(ρ[2:Ny, 1], u[2:Ny, 1, 1], u[2:Ny, 1, 2], k) + f[2:Ny, 2, k] - fEq2(ρ[2:Ny, 2], u[2:Ny, 2, 1], u[2:Ny, 2, 2], k)
-            f[2:Ny, Nx+1, k] = fEq2(ρ[2:Ny, Nx+1], u[2:Ny, Nx+1, 1], u[2:Ny, Nx+1, 2], k) + f[2:Ny, Nx, k] - fEq2(ρ[2:Ny, Nx], u[2:Ny, Nx, 1], u[2:Ny, Nx, 2], k)
-        end
+    
         # 保存各向速度ux，uy
         if tk == (num - 1) * gap + 1
             save_ux[:, :, num] = u[:, :, 1]
