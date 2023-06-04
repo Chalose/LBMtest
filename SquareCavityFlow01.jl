@@ -111,24 +111,26 @@ u, v = @time mainFun();
 uv = @. sqrt(u^2 + v^2)
 # TyPlot
 begin
-    subplot(211)
+    subplot(121)
     p1 = TyPlot.pcolor(x, y, uv)
     TyPlot.axis("equal", "tight")
     TyPlot.colormap(p1, "jet")
-    TyPlot.colorbar(p1)
-    title("speed")
+    #TyPlot.colorbar(p1)
+    tit1 = string("speed", '\n', "Re = ", Re)
+    title(tit1)
 
-    subplot(212)
-    startx1 = 80:0.01:Nx+1      # 右下角涡
+    subplot(122)
+    startx1 = 80:0.01:Nx+1    # 右下角涡
     starty1 = 0:0.01:21
     TyPlot.streamline(X, Y, u, v, startx1, starty1, color="black")
     hold("on")
-    startx2 = 1:0.05:Nx+1       # 大涡与左下角涡
+    startx2 = 1:0.05:Nx+1     # 大涡与左下角涡
     starty2 = 1:0.05:Ny+1
     TyPlot.streamline(X, Y, u, v, startx2, starty2, color="black")
     Xx, Yy = meshgrid2(2:5:Nx+1, 2:5:Ny+1)
     TyPlot.quiver(Xx, Yy, u[2:5:Nx+1, 2:5:Ny+1], v[2:5:Nx+1, 2:5:Ny+1], length=200)
     hold("off")
     TyPlot.axis("equal", "tight")
-    title("streamline")
+    tit2 = string("streamline", '\n', "Re = ", Re)
+    title(tit2)
 end
