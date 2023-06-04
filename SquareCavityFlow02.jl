@@ -1,149 +1,157 @@
-#= 采用LBGK模型，演算顶盖驱动方腔流问题
-速度离散模型：D2Q9:
+#= 对顶盖驱动方腔流场添加障碍物(LBGK)
+D2Q9模型:
 7---3---6
 | \ | / |
 4---1---2
 | / | \ |
 8---5---9
-在流场中添加静止障碍物，壁面无滑移
+障碍物边界采用(伪)修正反弹格式，四壁采用非平衡外推可消除迁移过程的四壁粒子数不守恒问题；
+出现发散的主要原因来自于障碍物的修正反弹格式并不严格，为保证精度与稳定性前提下应使Nx、Ny取较大值。
+单位值为格子单位制。
 =#
 using Plots
 
-# 环境参数
-H = 100.0      # 方腔边长SI[m]
-nu = 0.0667    # 流体运动粘度SI[m²/s]
-U = 0.667      # 顶盖速率SI[m/s]
-ρ₀ = 1.0       # 初始流体密度SI[kg/m³]
-N = 100        # 边离散节点数
-δt = 1         # 时间步SI[s]
-tmax = 6000    # 计算总时间SI[s]
-obstX = 70     # 圆心坐标x
-obstY = 50     # 圆心坐标y
-obstR = 15     # 圆半径
+# 环境参数(各参数均为格子单位，即δx = 1, δt = 1)===================================================
+Nx = 128                    # x向格子数
+Ny = 128                    # y向格子数
+obstx = 3 * Nx / 4          # 圆柱圆心坐标
+obsty = Ny / 2
+obstr = Nx / 10             # 圆柱半径
+U = 0.6                     # 顶盖速度
+Re = 5000                   # 雷诺数
+ν = U * Nx / Re             # 动力粘度
+ρ₀ = 1.0                    # 初始密度
+tmax = 5000                 # 最大求解时间
 
-Re = U * H / nu
-println("环境雷诺数Re = ", Re)
-
-# 求解域
-x = LinRange(0, H, N)
-y = LinRange(0, H, N)
-#X, Y = meshgrid2(x, y)
-X = x' .* ones(N)         # 右为x正向，下为y正向
-Y = ones(N)' .* y
-t = 0:δt:tmax
+# 求解域==========================================================================================
+x = LinRange(0, Nx, Nx + 1)
+y = LinRange(0, Ny, Ny + 1)
+X = x' .* ones(Ny + 1, Nx + 1)           # 右为x正向，下为y正向
+Y = ones(Ny + 1, Nx + 1) .* y
+t = 0:1:tmax
 M = length(t)
-# 设置固定壁蒙板
-obst = (X .- obstX) .^ 2 + (Y .- obstY) .^ 2 .<= obstR^2    # 圆壁面
-obst[:, [1, N]] .= true                                 # 左右壁面
-obst[1, :] .= true                                      # 底壁面
-CI_obst = findall(obst)                                 # 获取固定壁的笛卡尔索引序列
+# 障碍物蒙板
+obst = (X .- obstx) .^ 2 + (Y .- obsty) .^ 2 .<= obstr^2
+CI_obst = findall(obst)
 
-# LBGK:
-function LBGK()
-    # D2Q9:
-    δx = H / (N - 1)
-    c₀ = δx / δt
-    cₛ = c₀ / sqrt(3)
-    τ = nu / (cₛ^2 * δt) + 1 / 2
-    ω = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36]
-    cx = c₀ * [0 1 0 -1 0 1 -1 -1 1]
-    cy = c₀ * [0 0 1 0 -1 1 1 -1 -1]
+# D2Q9============================================================================================
+# c₀ = δx/δt = 1, cₛ = c₀/sqrt(3), τ = ν/(cₛ^2*δt) + 1/2
+τ = 3.0 * ν + 0.5
+ω = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36]
+cx = [0 1 0 -1 0 1 -1 -1 1]
+cy = [0 0 1 0 -1 1 1 -1 -1]
+# 平衡态函数
+function fEq!(u, v, ρ, Q)
+    feq = ω[Q] * ρ .* (1 .+ 3.0 * (cx[Q] * u + cy[Q] * v) +
+                       4.5 * (cx[Q] * u + cy[Q] * v) .^ 2 -
+                       1.5 * (u .^ 2 + v .^ 2))
+    return feq
+end
 
-    # 初始化
-    ρ = ones(N, N) * ρ₀
-    u = zeros(N, N, 2)
-    u[N, :, 1] .= U          # 顶板滑移速度
-    f = zeros(N, N, 9)
-    F = zeros(N, N, 9)
-    feq = zeros(N, N, 9)
-    # 分布函数初值(局域平衡态):
-    for k in 1:9
-        f[:, :, k] = ω[k] * ρ[:, :] .* (1 .+ 1 / cₛ^2 * (
-            (cx[k] * u[:, :, 1] + cy[k] * u[:, :, 2]) +
-            (cx[k] * u[:, :, 1] + cy[k] * u[:, :, 2]) .^ 2 * (1 / (2 * cₛ^2)) -
-            (u[:, :, 1] .^ 2 + u[:, :, 2] .^ 2) * (1 / 2)
-        ))
+# 存储设置=========================================================================================
+gap = 50             # 每间隔gap个时间步存储一次数据用于返回
+NUM = Int(round(M / gap)) + 1
+save_u = zeros(Ny + 1, Nx + 1, NUM)
+save_v = zeros(Ny + 1, Nx + 1, NUM)
+
+# 主函数===========================================================================================
+function mainFun()
+    ρ = ones(Ny + 1, Nx + 1) * ρ₀
+    u = zeros(Ny + 1, Nx + 1)
+    v = zeros(Ny + 1, Nx + 1)
+    @views u[Ny+1, :] .= U
+    f = zeros(Ny + 1, Nx + 1, 9)
+    # 分布函数初值(初始局域平衡)
+    @views for Q in 1:9
+        f[:, :, Q] = fEq!(u, v, ρ, Q)
     end
 
-    # LGBK:
-    save_P = zeros(N, N, M)
-    save_ux = zeros(N, N, M)
-    save_uy = zeros(N, N, M)
-    # 显式步进
-    for tk in 1:M
-        # 碰撞步
-        for k in 1:9
-            feq[:, :, k] = ω[k] * ρ[:, :] .* (1 .+ 1 / cₛ^2 * (
-                (cx[k] * u[:, :, 1] + cy[k] * u[:, :, 2]) +
-                (cx[k] * u[:, :, 1] + cy[k] * u[:, :, 2]) .^ 2 * (1 / (2 * cₛ^2)) -
-                (u[:, :, 1] .^ 2 + u[:, :, 2] .^ 2) * (1 / 2)
-            ))
-            f[:, :, k] = f[:, :, k] * (1 - 1 / τ) + 1 / τ * feq[:, :, k]
+    # LBGK迭代
+    num = 1          # 存储计数
+    for k in 1:M
+        # 包括边界粒子的碰撞步......................................................................
+        @views for Q in 1:9
+            f[:, :, Q] = f[:, :, Q] * (1 - 1 / τ) + 1 / τ * fEq!(u, v, ρ, Q)
         end
-        # 迁移步:
-        f[:, 2:N, 2] = f[:, 1:N-1, 2]         # 左向右
-        f[:, 1:N-1, 4] = f[:, 2:N, 4]         # 右向左
-        f[2:N, :, 3] = f[1:N-1, :, 3]         # 下向上
-        f[1:N-1, :, 5] = f[2:N, :, 5]         # 上向下
-        f[2:N, 2:N, 6] = f[1:N-1, 1:N-1, 6]   # 左下向右上
-        f[2:N, 1:N-1, 7] = f[1:N-1, 2:N, 7]   # 右下向左上
-        f[1:N-1, 1:N-1, 8] = f[2:N, 2:N, 8]   # 右上向左下
-        f[1:N-1, 2:N, 9] = f[2:N, 1:N-1, 9]   # 左上向右下
-        # 固定壁边界条件
-        F = f
+
+        # 迁移步...................................................................................
+        @views begin  # 边界迁移存在粒子数不守恒，后期由非平衡外推修正
+            f[:, 2:Nx+1, 2] = f[:, 1:Nx, 2]           # 左向右
+            f[:, 1:Nx, 4] = f[:, 2:Nx+1, 4]           # 右向左
+            f[2:Ny+1, :, 3] = f[1:Ny, :, 3]           # 下向上
+            f[1:Ny, :, 5] = f[2:Ny+1, :, 5]           # 上向下
+            f[2:Ny+1, 2:Nx+1, 6] = f[1:Ny, 1:Nx, 6]   # 左下向右上
+            f[2:Ny+1, 1:Nx, 7] = f[1:Ny, 2:Nx+1, 7]   # 右下向左上
+            f[1:Ny, 1:Nx, 8] = f[2:Ny+1, 2:Nx+1, 8]   # 右上向左下
+            f[1:Ny, 2:Nx+1, 9] = f[2:Ny+1, 1:Nx, 9]   # 左上向右下
+        end
+
+        # 障碍物修正反弹格式........................................................................
         for i in CI_obst
-            f[i, 2] = F[i, 4]
-            f[i, 3] = F[i, 5]
-            f[i, 4] = F[i, 2]
-            f[i, 5] = F[i, 3]
-            f[i, 6] = F[i, 8]
-            f[i, 7] = F[i, 9]
-            f[i, 8] = F[i, 6]
-            f[i, 9] = F[i, 7]
+            f[i, [2, 3, 4, 5, 6, 7, 8, 9]] = f[i, [4, 5, 2, 3, 8, 9, 6, 7]]
         end
-        # 移动壁边界条件
-        ρᵗ = f[N, 2:N-1, 1] + f[N, 2:N-1, 2] + f[N, 2:N-1, 4] + 2 * (f[N, 2:N-1, 7] + f[N, 2:N-1, 3] + f[N, 2:N-1, 6])
-        f[N, 2:N-1, 5] = f[N, 2:N-1, 3]       # 上壁法向回弹
-        f[N, 2:N-1, 9] = f[N, 2:N-1, 7] - 2 * ω[7] / cₛ^2 * cx[7] * U * ρᵗ    # Ladd格式，碰撞动量转移
-        f[N, 2:N-1, 8] = f[N, 2:N-1, 6] - 2 * ω[6] / cₛ^2 * cx[6] * U * ρᵗ    # Ladd格式，碰撞动量转移
-        # 宏观量ρ 、u
-        ρ = sum(f, dims=3)
-        u[:, :, 1] = sum(reshape(cx .* reshape(f, N * N, 9), N, N, 9), dims=3) ./ ρ
-        u[:, :, 2] = sum(reshape(cy .* reshape(f, N * N, 9), N, N, 9), dims=3) ./ ρ
-        # 刷新顶盖速度
-        u[N, :, 1] .= U
-        u[N, :, 2] .= 0.0
-        # 保存数据动压P、各向速度ux,uy
-        save_P[:, :, tk] = cₛ^2 * ρ
-        save_ux[:, :, tk] = u[:, :, 1]
-        save_uy[:, :, tk] = u[:, :, 2]
+
+        # 宏观量ρ, u, v刷新.........................................................................
+        @views begin
+            sum!(ρ, f)
+            u = sum!(u, reshape(cx .* reshape(f, (Ny + 1) * (Nx + 1), 9), Ny + 1, Nx + 1, 9)) ./ ρ
+            v = sum!(v, reshape(cy .* reshape(f, (Ny + 1) * (Nx + 1), 9), Ny + 1, Nx + 1, 9)) ./ ρ
+        end
+
+        # 四壁非平衡外推............................................................................
+        # 确定边界宏观量
+        @views begin
+            u[:, [1, Nx + 1]] .= 0.0
+            v[:, [1, Nx + 1]] .= 0.0
+            u[1, :] .= 0.0
+            v[1, :] .= 0.0
+            u[Ny+1, :] .= U
+            v[Ny+1, :] .= 0.0
+        end
+        # 非平衡外推
+        @views for Q in [6, 2, 9]  # left
+            f[2:Ny, 1, Q] = fEq!(u[2:Ny, 1], v[2:Ny, 1], ρ[2:Ny, 1], Q) + f[2:Ny, 2, Q] - fEq!(u[2:Ny, 2], v[2:Ny, 2], ρ[2:Ny, 2], Q)
+        end
+        @views for Q in [7, 4, 8]  # right
+            f[2:Ny, Nx+1, Q] = fEq!(u[2:Ny, Nx+1], v[2:Ny, Nx+1], ρ[2:Ny, Nx+1], Q) + f[2:Ny, Nx, Q] - fEq!(u[2:Ny, Nx], v[2:Ny, Nx], ρ[2:Ny, Nx], Q)
+        end
+        @views for Q in [7, 3, 6]  # bottom
+            f[1, :, Q] = fEq!(u[1, :], v[1, :], ρ[1, :], Q) + f[2, :, Q] - fEq!(u[2, :], v[2, :], ρ[2, :], Q)
+        end
+        @views for Q in [8, 5, 9]  # top
+            f[Ny+1, :, Q] = fEq!(u[Ny+1, :], v[Ny+1, :], ρ[Ny+1, :], Q) + f[Ny, :, Q] - fEq!(u[Ny, :], v[Ny, :], ρ[Ny, :], Q)
+        end
+
+        # 保存各向速度u、v.............................................................................
+        if k == (num - 1) * gap + 1
+            @views save_u[:, :, num] = u
+            @views save_v[:, :, num] = v
+            num += 1
+        end
     end
 
-    return save_P, save_ux, save_uy
+    return save_u, save_v
 end
-save_P, save_ux, save_uy = @time LBGK()
+u, v = @time mainFun();
 
-# 绘图
-# Plots:
-umod = zeros(N, N, M)
-dynamic_P = save_P
-for tk in 1:M
-    umod[:, :, tk] = sqrt.(save_ux[:, :, tk] .^ 2 + save_uy[:, :, tk] .^ 2)  # 速度模
-    for i in CI_obst
-        dynamic_P[i, tk] = 0.0                                               # 刨除障碍物的动压分布
-    end
+# 绘图=============================================================================================
+uv = zeros(Ny + 1, Nx + 1, NUM)
+# 速度模SI[m/s]
+@views for num in 1:NUM
+    uv[:, :, num] = sqrt.(u[:, :, num] .^ 2 + v[:, :, num] .^ 2)
 end
-
+# 动态图
 begin
-    @gif for tk in 1:20:M
-        ttl = string("t = ", round(tk*δt, digits=1), "s ", "speed[m/s]")
-        p1 = heatmap(x, y, umod[:, :, tk],
+    anime = @animate for num in 1:NUM
+        ttl = string("Re = ", Re, "\n", "t = ", (num - 1) * gap, " [Lattice unit]")
+        p1 = Plots.heatmap(x, y, uv[:, :, num],
             color=:turbo,
             title=ttl,
-            aspect_ratio=1)
-        p2 = contour(x, y, dynamic_P[:, :, tk],
+            colorbar_title="Speed  [Lattice unit]",
             aspect_ratio=1,
-            title="dynamic pressure[pa]")
-        p3 = plot(p1, p2, layout=(2, 1), size=(500, 800), xlims=(0,H), ylims=(0,H))
+            xlims=(0, Nx), ylims=(0, Ny),
+            xlabel="x [Lattice unit]", ylabel="y [Lattice unit]",
+            size=(600, 700))
     end
+    gif(anime, fps=8)
 end
