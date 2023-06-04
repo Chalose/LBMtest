@@ -119,9 +119,16 @@ begin
     title("speed")
 
     subplot(212)
-    startx = 1:0.01:Ny+1
-    starty = 1:0.01:Ny+1
-    TyPlot.streamline(X, Y, u, v, startx, starty, color="black")
+    startx1 = 80:0.01:Nx+1      # 右下角涡
+    starty1 = 0:0.01:21
+    TyPlot.streamline(X, Y, u, v, startx1, starty1, color="black")
+    hold("on")
+    startx2 = 1:0.05:Nx+1       # 大涡与左下角涡
+    starty2 = 1:0.05:Ny+1
+    TyPlot.streamline(X, Y, u, v, startx2, starty2, color="black")
+    Xx, Yy = meshgrid2(2:5:Nx+1, 2:5:Ny+1)
+    TyPlot.quiver(Xx, Yy, u[2:5:Nx+1, 2:5:Ny+1], v[2:5:Nx+1, 2:5:Ny+1], length=200)
+    hold("off")
     TyPlot.axis("equal", "tight")
     title("streamline")
 end
