@@ -4,7 +4,7 @@
 顶盖驱动方腔流(Re=5000)，4涡分布：
 ![image](https://github.com/Chalose/LBMtest/blob/main/figure/SquareCavity01.png)
 
-带障碍蒙板方腔流：
+带障碍蒙板方腔流:
 ![image](https://github.com/Chalose/LBMtest/blob/main/figure/SquareCavity02.gif)
 
 圆柱绕流(Re=300):
